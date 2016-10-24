@@ -1,0 +1,300 @@
+#!/usr/bin/perl
+# Gavin Mack gmmack@ucsc.edu
+use strict;
+use warnings;
+use Getopt::Long;
+use POSIX qw(strftime);
+use Data::Dumper;
+
+
+my %options = ();
+my $return = GetOptions(\%options, "d", "n", "f=s");
+my $macros = {};
+my $deps = {};
+my $commands = {};
+my $done_that = {};
+my @targets = ();
+my $liner = "";
+
+$options{f} = "Makefile" if !exists $options{f};
+my $filename = $options{f};
+
+open my $file, "<$filename" or warn "$0: $filename: $!\n" and next;
+
+my $target;
+while (<$file>) {
+   $liner = $_;
+   #print $liner;
+   if (index($liner, "#") < 0) {
+      #print "liner in  = $liner\n";
+      while (resolveToken($liner) >= 0) {}
+      #print "liner out = $liner\n";
+   }
+   if (index($liner, "#") >= 0) { #comment
+      next;
+   }elsif (index($liner, "=") >= 0) { #macro
+      chomp($liner);
+      my @split = split(/=/, $liner); #split[0]=key, split[1]=val
+      $split[0] =~ s/\s+//g;
+      $macros->{$split[0]} = $split[1];
+      #print Dumper($macros);
+   }elsif (index($liner, ":") >= 0) { #target - dep
+      my @split = split(/:/, $liner);
+      $split[0] =~ s/\s+//g; #remove whitespace
+      chomp($split[1]);
+      $split[1] =~ s/^\s+//;#remove whitespace at beginning only
+      $deps->{$split[0]} = $split[1];
+      $target = $split[0];
+      push @targets, $target;
+      #$done_that->{$target} = 0;
+      #print Dumper($done_that);
+      #print "$split[0]\n";
+   }elsif (index($liner, "\t") >= 0) { #command
+      chomp($liner);
+      #print "'$split[1]'\n";
+      $liner =~ s/^\s+//;
+      my @commandarray;
+      if (defined($commands->{$target})) {
+         @commandarray = $commands->{$target};
+         push @commandarray, $liner;
+         $commands->{$target} = @commandarray;
+      }else {
+         push @commandarray, $liner;
+         $commands->{$target} = $liner;
+         $done_that->{$target} = 0;
+      }
+   }
+}
+
+my $firsttarget = "";
+if ($#ARGV >= 0) {$firsttarget = $ARGV[0];}
+else {$firsttarget = $targets[0];}
+
+my $term_signal = "";
+my $core_dumped = "";
+my $exit_status = "";
+
+build_or_process($firsttarget);
+
+sub executecommands {
+   my $target = shift;
+   my @array = $commands->{$target};
+   foreach my $command (@array) {
+      #while (resolveToken($command)>=0) {}
+      print "$command\n";
+      if (!$options{n}) {
+         system($command);
+         $term_signal = $? & 0x7F;
+         $core_dumped = $? & 0x80;
+         $exit_status = ($? >> 8) & 0xFF;
+      }
+   }
+}
+
+sub build_or_process {
+   my $target = shift;
+   my @depsarray = split(/ /,$deps->{$target});
+   my $result = 99;
+   foreach my $dep (@depsarray) {
+      $result = do_build($target, $dep);
+      if ($result == 1) { #build this target
+         $done_that->{$target} = 1;
+         executecommands($target);
+      }elsif ($result == 2) { #don't build; up to date
+         #print "result is 2!!!\n";
+         next;
+      }elsif ($result == 3) { #dep is a target, build that
+         #print "bout to recur yo\n";
+         build_or_process($dep);
+      }elsif ($result == 4) {
+         print "Error: bad makefile!\n";
+      }
+   }
+   
+   #print Dumper($done_that);
+}
+
+#compares ages of arg1 (target) and arg2 (dependency)
+#returns true if target is older than dependency
+sub do_build {
+   my $arg1 = shift;
+   my $arg2 = shift;
+   my @targetstat = ();
+   my @dependency = ();
+   my $mtime1 = 0;
+   my $mtime2 = 0;
+   
+   if (-e $arg1 && -f $arg1) {
+      @targetstat = stat($arg1);
+   }else {
+      foreach my $target (@targets) {
+         if ($target eq $arg2) {return 3;} #dep is a target
+      }
+      if (defined($commands->{$arg1})) {
+         return 1;
+      }
+   }
+   if (-e $arg2 && -f $arg2) {
+      @dependency = stat($arg2);
+      $mtime1 = $targetstat[9];
+      $mtime2 = $dependency[9];
+      if ($options{d}) {
+         print "Target ($arg1) age: " . $mtime1 . "\n";
+         print "Depend ($arg2) age: " . $mtime2 . "\n";
+      }
+      if ($mtime1 < $mtime2) {
+         print "target-hello dep-main.o\n";
+         return 1;#execute commands for this target
+      }else {
+         return 2;#no build;up to date
+      }
+   }else { #dep not a file
+      foreach my $target (@targets) {
+         if ($target eq $arg2) {return 3;} #dep is a target
+      }
+      return 4; #bad build file
+   }
+}
+
+
+
+sub getValidToken {
+   my $line = shift;
+   my $startPosition = length($line);
+   my $precedingChar = "";
+   my $followingChar = "";
+   my $tokenPosition = "";
+   while ($startPosition >= 0) {
+      $tokenPosition = rindex($line, "\$", $startPosition);
+      return -1 if $tokenPosition < 0; # No tokens found
+      $precedingChar = substr($line, $tokenPosition - 1, 1);
+      $followingChar = substr($line, $tokenPosition + 1, 1);
+      if ($precedingChar eq "\$" or $followingChar eq "<" 
+          or $followingChar eq "@" or $followingChar eq "{"
+          or $followingChar eq "(") {
+         return($tokenPosition);
+      }
+      $startPosition = $tokenPosition - 1;
+   }
+   return (-1);
+}
+
+sub resolveToken {
+   my $firstPart = "";
+   my $macroText = "";
+   my $resolvedTokenText = "";
+   my $tokenTerminator = "";
+   #$liner = shift;
+   my $skipCharacters;
+
+   # get last dollar sign position in the subject string
+   my $dollarPosition = getValidToken($liner);
+
+   # get string up to dollar sign for later building of resolved string
+   $firstPart = substr($liner, 0, $dollarPosition);
+   #print "firstPart: '" . $firstPart . "'\n";
+   my $fromDollarToEndOfString = substr($liner, $dollarPosition);
+   #print "fromDollarToEndOfString: " . $fromDollarToEndOfString. "\n";
+
+   # determine what kind of token we're dealing with
+   my $precedingChar = substr($liner, $dollarPosition - 1, 1);
+   my $followingChar = substr($liner, $dollarPosition + 1, 1);
+   #print "followingChar: " . $followingChar . "\n";
+   if ($precedingChar eq "\$") {
+      # Special case dollar sign
+      $resolvedTokenText = "";
+      $skipCharacters = 1;
+   }elsif ($followingChar eq "<") { 
+      $resolvedTokenText = "!dependency!";
+      $skipCharacters = 2;
+   }elsif ($followingChar eq "@") {
+      $resolvedTokenText = "!target!";
+      $skipCharacters = 2;
+   }elsif ($followingChar eq "{" or $followingChar eq "(") {
+      $tokenTerminator = "}" if $followingChar eq "{";
+      $tokenTerminator = ")" if $followingChar eq "(";
+      my $closeBracePosition = 
+           index($fromDollarToEndOfString, $tokenTerminator);
+      $macroText = substr($fromDollarToEndOfString, 
+                          2, $closeBracePosition - 2);
+      print "macroText: '" . $macroText . "'\n";
+      $resolvedTokenText = $macros->{$macroText};
+      $skipCharacters = length($macroText) + 3;
+   }else {
+      return(-1);
+   }
+
+   # rebuild the command with the token resolved
+   $liner = $firstPart . $resolvedTokenText . 
+           substr($liner, $dollarPosition + $skipCharacters);
+   #print "newLine: '" . $liner . "'\n";
+   return(index($liner, "\$"));
+}
+
+my %strsignal = (
+    0 => "Unknown signal 0",
+    1 => "Hangup",
+    2 => "Interrupt",
+    3 => "Quit",
+    4 => "Illegal instruction",
+    5 => "Trace/breakpoint trap",
+    6 => "Aborted",
+    7 => "Bus error",
+    8 => "Floating point exception",
+    9 => "Killed",
+   10 => "User defined signal 1",
+   11 => "Segmentation fault",
+   12 => "User defined signal 2",
+   13 => "Broken pipe",
+   14 => "Alarm clock",
+   15 => "Terminated",
+   16 => "Stack fault",
+   17 => "Child exited",
+   18 => "Continued",
+   19 => "Stopped (signal)",
+   20 => "Stopped",
+   21 => "Stopped (tty input)",
+   22 => "Stopped (tty output)",
+   23 => "Urgent I/O condition",
+   24 => "CPU time limit exceeded",
+   25 => "File size limit exceeded",
+   26 => "Virtual timer expired",
+   27 => "Profiling timer expired",
+   28 => "Window changed",
+   29 => "I/O possible",
+   30 => "Power failure",
+   31 => "Bad system call",
+   32 => "Unknown signal 32",
+   33 => "Unknown signal 33",
+   34 => "Real-time signal 0",
+   35 => "Real-time signal 1",
+   36 => "Real-time signal 2",
+   37 => "Real-time signal 3",
+   38 => "Real-time signal 4",
+   39 => "Real-time signal 5",
+   40 => "Real-time signal 6",
+   41 => "Real-time signal 7",
+   42 => "Real-time signal 8",
+   43 => "Real-time signal 9",
+   44 => "Real-time signal 10",
+   45 => "Real-time signal 11",
+   46 => "Real-time signal 12",
+   47 => "Real-time signal 13",
+   48 => "Real-time signal 14",
+   49 => "Real-time signal 15",
+   50 => "Real-time signal 16",
+   51 => "Real-time signal 17",
+   52 => "Real-time signal 18",
+   53 => "Real-time signal 19",
+   54 => "Real-time signal 20",
+   55 => "Real-time signal 21",
+   56 => "Real-time signal 22",
+   57 => "Real-time signal 23",
+   58 => "Real-time signal 24",
+   59 => "Real-time signal 25",
+   60 => "Real-time signal 26",
+   61 => "Real-time signal 27",
+   62 => "Real-time signal 28",
+   63 => "Real-time signal 29",
+   64 => "Real-time signal 30",
+);

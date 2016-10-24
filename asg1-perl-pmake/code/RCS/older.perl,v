@@ -1,0 +1,69 @@
+head	1.1;
+access;
+symbols;
+locks;
+comment	@# @;
+
+
+1.1
+date	2014.10.10.22.23.29;	author -;	state -;
+branches;
+next	;
+
+
+desc
+@@
+
+
+1.1
+log
+@-
+@
+text
+@#!/usr/bin/perl
+# $Id: older.perl,v 1.1 2014-10-10 15:05:45-07 - - $
+#
+# NAME
+#    older.perl - check whether a pair of files are older or newer
+#
+# SYNOPSIS
+#    older.perl file1 file2
+#
+# DESCRIPTION
+#    The two files' modification times are compared and a
+#    relationship is printed.
+#
+
+use strict;
+use warnings;
+use POSIX qw(strftime);
+$0 =~ s|.*/||;
+
+sub mtime ($) {
+   my ($filename) = @@_;
+   my @@stat = stat $filename;
+   return @@stat ? $stat[9] : undef;
+}
+
+sub fileinfo ($) {
+   my ($filename) = @@_;
+   my $mtime = mtime $filename;
+   print "$filename: ";
+   if (defined $mtime) {print strftime "%c\n", localtime $mtime}
+                  else {print "$!\n"}
+   return $mtime;
+}
+
+die "Usage: $0 file1 file2\n" unless @@ARGV == 2;
+
+my @@mtimes = map {fileinfo $_} @@ARGV;
+
+if (grep {defined $_} @@mtimes == 2) {
+   print "$ARGV[0] ";
+   print $mtimes[0] < $mtimes[1] ? "is older than"
+       : $mtimes[0] > $mtimes[1] ? "is newer than"
+       : "same time as";
+   print " $ARGV[1]\n";
+}
+
+@

@@ -1,0 +1,53 @@
+head	1.1;
+access;
+symbols;
+locks;
+comment	@# @;
+
+
+1.1
+date	2011.12.20.03.59.16;	author -;	state -;
+branches;
+next	;
+
+
+desc
+@@
+
+
+1.1
+log
+@-
+@
+text
+@#!/usr/bin/perl
+# $Id: eratosthenes.perl,v 1.2 2011-12-19 19:50:09-08 - - $
+
+BEGIN{
+   push @@INC, "/afs/cats.ucsc.edu/courses/cmps112-wm/Languages/perl/"
+            . "Lingua-Romana/Lingua-Romana-Perligata-0.50/lib";
+}
+use Lingua::Romana::Perligata;
+
+maximum tum val inquementum tum biguttam tum stadium egresso scribe.
+vestibulo perlegementum da meo maximo.
+maximum tum novumversum egresso scribe.
+da II tum maximum conscribementa meis listis.
+
+dum damentum nexto listis decapitamentum
+    fac sic
+
+        lista sic
+            hoc tum nextum recidementum
+        cis
+        vannementa da listis.
+
+        dictum sic
+            deinde
+        cis
+        tum biguttam tum stadium tum cum nextum comementum tum
+        novumversum scribe egresso.
+
+    cis.
+
+@

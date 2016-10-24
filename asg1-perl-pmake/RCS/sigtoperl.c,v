@@ -1,0 +1,102 @@
+head	1.4;
+access;
+symbols;
+locks;
+comment	@ * @;
+
+
+1.4
+date	2011.12.21.01.08.31;	author -;	state -;
+branches;
+next	1.3;
+
+1.3
+date	2011.12.21.01.08.12;	author -;	state -;
+branches;
+next	1.2;
+
+1.2
+date	2011.12.21.01.07.49;	author -;	state -;
+branches;
+next	1.1;
+
+1.1
+date	2011.12.21.01.07.35;	author -;	state -;
+branches;
+next	;
+
+
+desc
+@@
+
+
+1.4
+log
+@-
+@
+text
+@// $Id: sigtoperl.c,v 1.3 2011-12-20 17:08:12-08 - - $
+
+#define _GNU_SOURCE
+
+#include <signal.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+int main (void) {
+   int sig;
+   system ("echo '#' `uname -srp`");
+   printf ("my %%strsignal = (\n");
+   for (sig = 0; sig < _NSIG; ++sig) {
+      char *strsig = strsignal (sig);
+      if (strsig == NULL) continue;
+      printf ("%5d => \"%s\",\n", sig, strsig);
+   }
+   printf (");\n");
+   return EXIT_SUCCESS;
+}
+
+@
+
+
+1.3
+log
+@-
+@
+text
+@d1 1
+a1 1
+// $Id: sigtoperl.c,v 1.2 2011-12-20 17:07:49-08 - - $
+d14 1
+a14 1
+   for (sig = 0; sig <= _NSIG; ++sig) {
+@
+
+
+1.2
+log
+@-
+@
+text
+@d1 1
+a1 1
+// $Id: sigtoperl.c,v 1.1 2011-12-20 17:07:35-08 - - $
+d13 1
+a13 1
+   printf ("my %strsignal = (\n");
+@
+
+
+1.1
+log
+@-
+@
+text
+@d1 1
+a1 1
+// $Id: sigtoperl.c,v 1.9 2011-03-24 17:54:12-07 - - $
+d13 1
+a13 1
+   printf ("my %strsignal = (
+@
